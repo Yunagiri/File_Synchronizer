@@ -1,0 +1,30 @@
+#!/bin/bash
+source ./iterator
+
+pathToDirectoryA='./arb1'
+pathToDirectoryB='./arb2'
+
+tmpPath=$PWD
+
+cd $pathToDirectoryA
+pathToDirectoryA=$PWD
+cd $tmpPath
+cd $pathToDirectoryB
+pathToDirectoryB=$PWD
+
+echo $pathToDirectoryA
+echo $pathToDirectoryB
+
+pathToDataBaseA='/dev/shm/SyncDataBaseA'
+pathToDataBaseB='/dev/shm/SyncDataBaseB'
+
+> $pathToDataBaseA
+> $pathToDataBaseB
+
+#Iterate and create database files in multi processing :
+iterate $pathToDirectoryA $pathToDataBaseA & iterate $pathToDirectoryB $pathToDataBaseB &
+wait
+
+
+rm $pathToDataBaseA
+rm $pathToDataBaseB
