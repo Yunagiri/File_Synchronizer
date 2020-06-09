@@ -1,10 +1,11 @@
 #!/bin/bash
 
-#Usage : iterate path/to/directory/to/scan path/to/database
+#Usage : iterate path/to/directory/to/scan path/to/database path/to/directory/to/scan"/"
 iterate()
 {
 	if [ $# -lt 2 ] ; then
-		echo "Not enough arguments: 2 are requested, the directory and the target file"
+		echo "Not enough arguments: 3 are requested"
+		echo "Usage : iterate path/to/directory/to/scan path/to/database path/to/directory/to/scan"/""
 		exit 1
 	fi
 	if [ ! -d "$1" ] ; then
@@ -18,16 +19,16 @@ iterate()
 	for file in "$1"/*
 		do
 		if [ -d "$file" ] ; then
-			echo "subdirectory '${file##*/}' found"
+			#echo "subdirectory '${file##*/}' found"
+			tmp=$(stat -c '%n %F %A %s bytes %y' "$file")
+			echo ${tmp#$3} >> "$2"
 			#recursively call the function for subdir
-			iterate "$file" "$2"
+			iterate "$file" "$2" "$3"
 		else
-			echo "$file##*/"
+			#echo "${file##*/}"
 			#log all the metadata into the temp file
-			modtime=$(stat -c '%y' "$file")
-			echo "${file##*/}" "$modtime" >> "$2"
+			tmp=$(stat -c '%n %F %A %s bytes %y' "$file")
+			echo ${tmp#$3} >> "$2"
 		fi
 		done
 }
-
-iterate "$PWD" Database.txt

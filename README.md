@@ -2,7 +2,7 @@ garder les logs de changement
 1 liste de tous les fichiers depuis le début (bdd)
 1 journal avec les erreurs et conflits de toutes les opérations faites depuis le début (log)
 maintenance de la database (quand effacer les logs? prompt user ou automatiquement apres un certain moment etc)
-1 comparateur: comparaison de l'arb1 ET de l'arb2 avec les metadata de la db
+1 comparateur: comparaison des metadata de l'arb1 ET de l'arb2 avec les metadata de la db
 
 scan branche A --> créé fichier avec liste de tout les dossiers et fichiers de la branche A
 Idem pour B

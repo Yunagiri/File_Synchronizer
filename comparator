@@ -1,11 +1,64 @@
 #!/bin/bash
 
+#To be able to efficiently use all the files, we have to take 1 pattern line from
+#metadata file A and compare it with all the lines in the metadata file B. If there
+#is a match, then the file is conserved and therefore, not written into the
+#difference.txt file containing the modifications. If there are mo matches,
+#The missing file is written into the .txt
+#To reduce the comments consider A=databaseA B=databaseB and DB=databaseS
+
+#Usage : compare databaseA databaseS databaseB
+
 compare()
 {
 	if [ $# -lt 2 ] ; then
-		echo "Not enough arguments, 2 directories are required"
+		echo "Not enough arguments, 3 files are required"
+   		echo "Usage : compare databaseA databaseS databaseB"
+   		echo "databaseS is the database of the last sync"
 	fi
-	if [! -d "$1" ] || [ ! -d "$2" ] ; then
-		echo "Not a directory"
+	if [ ! -f "$1" ] || [ ! -f "$2" ] ; then
+		echo "Not a file"
 	fi
-	
+	while IFS= read -r line2; do
+		echo " "
+		echo "databaseS : ""$line2"
+		#get line number of match btw databaseA and databaseS (actual from while)
+		nline1=`awk -v var="$line2" '$0 == var {print NR}' $1`
+		nline1=$((0 + nline1)) #add a 0 in case of no return
+
+		nline3=`awk -v var="$line2" '$0 == var {print NR}' $3`
+		nline3=$((0 + nline3)) #add a 0 in case of no return
+
+		echo nline1 = $nline1 nline3 = $nline3
+
+		if [[ $nline1 -ne 0 ]] && [[ $nline3 -ne 0 ]]; then #no sync to do
+			echo Already sync : $line2
+			sed -i -e "${nline1}d" $1 #deleting the corresponding line in databaseA
+			sed -i -e "${nline3}d" $3 #deleting the corresponding line in databaseB
+		elif [[ $nline3 -eq 0 ]]; then #file has changed in B (A == DB)
+			echo File has changed in B
+			#searching if the file has been modified or deleted :
+			#get the file name + path
+			line2=`echo $line2 | head -n1 | awk '{print $1}'`
+			#search if the file name + path is in B
+			nline3=`awk -v var="$line2" '$1 == var{print NR}' $3`
+			nline3=$((0 + nline3)) #add a 0 in case of no return
+			if [[ $nline3 -ne 0 ]]; then #file + path found ==> B has been modified
+				echo The file still exist but has changed
+				#TODO : copy file B to A + upate DB
+			else
+				echo The file has been deleted
+				#TODO : delete the file in A + update DB
+			fi
+
+
+			# #get the line in DB and delete it :
+			# nline2=`awk -v var="$line2" '$0 == var {print NR}' $1`
+			# nline2=$((0 + nline2)) #add a 0 in case of no returnwc branche
+			# sed -i -e "${nline2}d" $2 #deleting the corresponding line in databaseS
+			# #add the new metadata in DB :
+			# echo $line1 >> "$2"
+		fi
+
+	done < "$2"
+}

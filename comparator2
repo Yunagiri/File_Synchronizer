@@ -1,0 +1,35 @@
+#!/bin/bash
+
+
+#Compare 2 files line by line
+
+compare()
+{
+	if [ $# -lt 2 ] ; then
+		echo "Not enough arguments, 2 files are required"
+	fi
+	if [ ! -f "$1" ] || [ ! -f "$2" ] ; then
+		echo "Not a file"
+	fi
+	while IFS= read -r line1; do
+		echo "metadata1: ""$line1"
+		flag=0
+		while IFS= read -r line2; do
+			echo "metadata2: ""$line2"
+			if [ "$line1" == "$line2" ]; then
+				flag=1
+			else
+				echo "Looking for file..."
+			fi
+			echo "flag value:" "$flag"
+		done < "$2"
+		if [ "$flag" -eq 0 ]; then
+			echo "$line1" >> difference
+			echo "Changement detected"
+		else
+			echo "Synchronized!"
+		fi
+	done < "$1"
+}
+
+compare metadata1.txt metadata2.txt

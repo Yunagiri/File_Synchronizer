@@ -16,11 +16,7 @@ generate()
 		echo "this is the" "$i""th file" > check_"$i".txt
 		mv check_"$i".txt arb1
 	done
-  for ((i=1; i < "$1" ; i++)); do
-    touch check_"$i".txt
-    echo "this is the" "$i""th file" > check_"$i".txt
-    mv check_"$i".txt arb2
-  done
+	cp -R arb1/* arb2
 }
 
 generate 20
