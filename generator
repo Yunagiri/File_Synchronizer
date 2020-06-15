@@ -16,7 +16,7 @@ generate()
 		echo "this is the" "$i""th file" > check_"$i".txt
 		mv check_"$i".txt arb1
 	done
-	cp -R arb1/* arb2
+	cp -rp arb1/* arb2
 }
 
 generate 20

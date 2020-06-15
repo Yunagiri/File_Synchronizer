@@ -20,7 +20,9 @@ pathToDataBaseB='/dev/shm/SyncDataBaseB'
 > $pathToDataBaseA
 > $pathToDataBaseB
 
-echo "Syncing "$pathToDirectoryA" and "$pathToDirectoryB""
+echo "Syncing ""$pathToDirectoryA"" and ""$pathToDirectoryB"
+echo `awk 'NR==1' $pathToDataBaseS`
+echo `awk 'NR==2' $pathToDataBaseS`
 
 #Iterate and create database files in multi processing :
 iterate $pathToDirectoryA $pathToDataBaseA $pathToDirectoryA"/" &

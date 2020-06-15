@@ -1,0 +1,35 @@
+#!/bin/bash
+
+#Search for the name of the file in both A and B : Argument given
+#Look up the line for both A and B
+#Look up the mod date
+#Compare the dates and choose the latest
+
+conflict #name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
+{
+  nlineA=$(awk -v var="$1" 'var == $1{print NR}' $4)
+  nlineB=$nameline
+
+  modA=$(awk '{print $8}' $nlineA)
+  echo modA: $modA
+  modB=$(awk '{print $8}' $nlineB)
+  echo modB: $modB
+
+  if [ "$modA" -gt "$modB"]; then
+    #Rename the file with the most recent mod date in its arb
+    mv "$7""$name" "$8""$name"_conflict
+    #Rename the file with the most recent mod date to file_conflict in the metadata
+    conflictLine1="${4/"$name"/"$name"_conflict}"
+    #Update the DB with both metadata, the file_conflict and the file.
+    echo "$conflictLine1" >> $pathToDataBaseS
+    awk '{if (NR=='$nameline') print $0}' $6 >> $5
+  else
+    #Rename the file with the most recent mod date in its arb
+    mv "$8""$name" "$8""$name"_conflict
+    #Rename the file with the most recent mod date to file_conflict in the metadata
+    conflictLine1="${4/"$name"/"$name"_conflict}"
+    #Update the DB with both metadata, the file_conflict and the file.
+    echo "$conflictLine1" >> $pathToDataBaseS
+    awk '{if (NR=='$nameline') print $0}' $4 >> $5
+  fi
+}

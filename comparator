@@ -5,24 +5,33 @@
 #is a match, then the file is conserved and therefore, not written into the
 #difference.txt file containing the modifications. If there are mo matches,
 #The missing file is written into the .txt
-#To reduce the comments consider A=databaseA B=databaseB and DB=databaseS
+#Consider : A=databaseA B=databaseB S=databaseS R=databaseRAM
 
 #Usage : compare databaseA databaseS databaseB
 
 compare()
 {
-	if [ $# -lt 2 ] ; then
-		echo "Not enough arguments, 3 files are required"
-   		echo "Usage : compare databaseA databaseS databaseB"
-   		echo "databaseS is the database of the last sync"
+	if [ $# -lt 3 ] ; then
+		echo "Not enough arguments, 4 files are required"
+   		echo "Usage : compare databaseA DB databaseB"
+   		echo "DB is the database of the last sync"
 	fi
-	if [ ! -f "$1" ] || [ ! -f "$2" ] ; then
+	if [ ! -f "$1" ] || [ ! -f "$2" ] || [ ! -f "$3" ]; then
 		echo "Not a file"
 	fi
+
+	#Path to temp databaseRAM (equivalent of databaseS)
+	pathToDataBaseRAM="/dev/shm/syncTmpDataBaseS"
+	pathToA=`sed '1q;d' $2`
+	pathToB=`sed '2q;d' $2`
+
+	#Remove the 2 first lines (which contains the path to the files in A and B)
+	tail -n +3 $2 > "$pathToDataBaseRAM"
+	#Iterate in R
 	while IFS= read -r line2; do
 		echo " "
-		echo "databaseS : ""$line2"
-		#get line number of match btw databaseA and databaseS (actual from while)
+		echo "DB RAM : ""$line2"
+		#get line number of match btw A and R (actual from while)
 		nline1=`awk -v var="$line2" '$0 == var {print NR}' $1`
 		nline1=$((0 + nline1)) #add a 0 in case of no return
 
@@ -32,33 +41,155 @@ compare()
 		echo nline1 = $nline1 nline3 = $nline3
 
 		if [[ $nline1 -ne 0 ]] && [[ $nline3 -ne 0 ]]; then #no sync to do
-			echo Already sync : $line2
+			echo Already sync
 			sed -i -e "${nline1}d" $1 #deleting the corresponding line in databaseA
 			sed -i -e "${nline3}d" $3 #deleting the corresponding line in databaseB
-		elif [[ $nline3 -eq 0 ]]; then #file has changed in B (A == DB)
-			echo File has changed in B
+		elif [[ $nline1 -eq 0 ]] && [[ $nline3 -eq 0 ]]; then #both are equal to 0 : conflict
+			echo "File has changed in A and B"
+
 			#searching if the file has been modified or deleted :
 			#get the file name + path
-			line2=`echo $line2 | head -n1 | awk '{print $1}'`
+			fileline2=`echo $line2 | head -n1 | awk '{print $1}'`
 			#search if the file name + path is in B
-			nline3=`awk -v var="$line2" '$1 == var{print NR}' $3`
+			nline3=`awk -v var="$fileline2" '$1 == var{print NR}' $3`
+			nline3=$((0 + nline3)) #add a 0 in case of no return
+
+			#searching if the file has been modified or deleted :
+			#search if the file name + path is in A
+			nline1=`awk -v var="$fileline2" '$1 == var{print NR}' $1`
+			nline1=$((0 + nline3)) #add a 0 in case of no return
+
+			if [[ $nline1 -eq 0 ]] && [[ $nline3 -eq 0 ]]; then #both deleted
+				#Remove file in #!/bin/sh
+				sed -i "/$line2/d" $2 #delete the line in S
+			elif [[ $nline1 -eq 0 ]]; then #file deleted in A and modified in B
+				echo "file deleted in A and modified in B"
+				echo "Copy file B to A"
+				#Copy file B to A + upate S
+				cp -rp "$pathToB""$fileline2" "$pathToA""$fileline2" #> /dev/null #don't display error from cp
+				#(usualy file not found) ???
+				sed -i "/$line2/d" $2 #delete the line in S
+				sed "${nline3}q;d" $3 >> "$2" #save in S the new file with new metadata
+			elif [[ $nline3 -eq 0 ]]; then #file deleted in B and modified in A
+				echo "file deleted in B and modified in A"
+				echo "Copy file A to B"
+				#Copy file B to A + upate S
+				cp -rp "$pathToA""$fileline2" "$pathToB""$fileline2" #> /dev/null #don't display error from cp
+				#(usualy file not found) ???
+				sed -i "/$line2/d" $2 #delete the line in S
+				sed "${nline1}q;d" $1 >> "$2" #save in S the new file with new metadata
+			else
+				echo "Conflict"
+				 conflict $fileline2 $line2 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
+			fi
+		elif [[ $nline3 -eq 0 ]]; then #file has changed in B (A == R)
+			echo "File has changed in B"
+			#searching if the file has been modified or deleted :
+			#get the file name + path
+			fileline2=`echo $line2 | head -n1 | awk '{print $1}'`
+			#search if the file name + path is in B
+			nline3=`awk -v var="$fileline2" '$1 == var{print NR}' $3`
 			nline3=$((0 + nline3)) #add a 0 in case of no return
 			if [[ $nline3 -ne 0 ]]; then #file + path found ==> B has been modified
-				echo The file still exist but has changed
-				#TODO : copy file B to A + upate DB
+				echo "The file still exist but has changed"
+				#Copy file B to A + upate S
+				cp -rp "$pathToB""$fileline2" "$pathToA""$fileline2" #> /dev/null #don't display error from cp
+				#(usualy file not found) ???
+				sed -i "/$line2/d" $2 #delete the line in S
+				sed "${nline3}q;d" $3 >> "$2" #save in S the new file with new metadata
 			else
-				echo The file has been deleted
-				#TODO : delete the file in A + update DB
+				echo "The file has been deleted"
+				#Delete the file in A + update S
+				rm -r "$pathToA""$fileline2" #> /dev/null #don't display error from rm
+				#(usualy file not found)
+				sed -i "/$line2/d" $2 #delete the line in S
 			fi
-
-
-			# #get the line in DB and delete it :
-			# nline2=`awk -v var="$line2" '$0 == var {print NR}' $1`
-			# nline2=$((0 + nline2)) #add a 0 in case of no returnwc branche
-			# sed -i -e "${nline2}d" $2 #deleting the corresponding line in databaseS
-			# #add the new metadata in DB :
-			# echo $line1 >> "$2"
+		elif [[ $nline1 -eq 0 ]]; then #file has changed in A (B == R)
+			echo "File has changed in A"
+			#searching if the file has been modified or deleted :
+			#get the file name + path
+			fileline2=`echo $line2 | head -n1 | awk '{print $1}'`
+			#search if the file name + path is in A
+			nline1=`awk -v var="$fileline2" '$1 == var{print NR}' $1`
+			nline1=$((0 + nline1)) #add a 0 in case of no return
+			if [[ $nline1 -ne 0 ]]; then #file + path found ==> A has been modified
+				echo "The file still exist but has changed"
+				#TODO : copy file A to B + upate S
+				cp -rp "$pathToA""$fileline2" "$pathToB""$fileline2" #> /dev/null #don't display error from cp
+				#(usualy file not found) ???
+				sed -i "/$line2/d" $2 #delete the line in S
+				sed "${nline1}q;d" $1 >> "$2" #save in S the new file with new metadata
+			else
+				echo "The file has been deleted"
+				#Delete the file in B + update S
+				rm -r "$pathToB""$fileline2" #> /dev/null #don't display error from rm
+				#(usualy file not found)
+				sed -i "/$line2/d" $2 #delete the line in S
+			fi
 		fi
 
-	done < "$2"
+		#cat $2
+
+	done < "$pathToDataBaseRAM"
+	#rm "$pathToDataBaseRAM"
+
+	#read each line of A, get the filename, check if it exists in B.
+	#If the file isn't in B, copy it to the DB and to B
+	#If the file is in B, shows a conflict.
+
+	while IFS= read -r line1; do #Read A
+	  echo "databaseA" : "$line1"
+	  name1=$(echo "$line1" | head -n1 | awk '{print $1}')
+
+	  nameline=$(awk -v var="$name1" '$1 == var{print NR}' $3)
+
+	  nameline=$((0+ nameline))
+		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
+			echo New file "$name1" detected
+			cp -rp "$pathToA""$name1" "$pathToB""$name1"
+
+			echo "$line1" >> "$2" #Save the line from A into S
+
+			sed -i "/$line1/d" "$1" #delete the line in A
+		else #New file is present in abr2
+				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
+				nlineS=$((0 + nlineS))
+				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
+					cp -rp "$pathToA""$name1" "$pathToDataBaseRAM"
+					sed -i "/$nlineS/d" $1
+					sed -i "/$line1/d" $3
+				else
+					echo Conflict
+					#name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
+					conflict $name1 $nameline $line1 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
+				fi
+		fi
+	done < "$1"
+
+	while IFS= read -r line3; do	#Read B
+		echo "databaseB" : "$line3"
+		name3=$(echo "$line3" | head -n1 | awk '{print $1}')
+		nameline=$(awk -v var="$name3" '$1 == var{print NR}' $1)
+		nameline=$((0+ nameline))
+		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
+			echo New file "$name3" detected
+			cp -rp "$pathToB""$name3" "$pathToA""$name3"
+
+			echo $line3 >> "$2"#Save the line from B into S
+			
+			sed -i "/$line3/d" "$3" #delete the line in B
+
+		else #New file is present in abr2
+				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
+				nlineS=$((0 + nlineS))
+				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
+					cp -rp "$pathToB""$name3" "$pathToDataBaseRAM"
+					sed -i "/$lineS/d" "$1"
+					sed -i "/$line/d" "$3"
+				else
+				conflict $name3 $nameline $line3 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
+				fi
+		fi
+
+done < "$3"
 }

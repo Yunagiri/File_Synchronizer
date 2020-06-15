@@ -1,0 +1,20 @@
+#!/bin/bash
+
+echo "Removes old test files and creates new ones"
+
+rm -r arb1
+rm -r arb2
+rm -r .database
+
+cp -rp arb1_original arb1
+cp -rp arb2_original arb2
+#cp -rp .database_original .database
+cp -rp .database_originalViet .database
+
+echo "Run test"
+echo ""
+
+./mainSync
+
+echo ""
+echo "Test done. Exiting."

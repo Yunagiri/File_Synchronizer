@@ -19,3 +19,8 @@ si pas de conflit copier fichier de A dans B + update metadata (de A) dans la DB
 pareil avec B
 
 Pour conflits : fichier le plus ancien on le renomme avec conflit et on garde me fichier le plus récent
+
+
+TODO: After the DB has been updated with all the new files, A and B will have
+all the new files that hasn't been synchronized. The new files will have to
+be put into DB and deleted from A and B (optional)
