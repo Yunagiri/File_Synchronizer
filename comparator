@@ -25,17 +25,23 @@ compare()
 	pathToA=`sed '1q;d' $2`
 	pathToB=`sed '2q;d' $2`
 
+
+
 	#Remove the 2 first lines (which contains the path to the files in A and B)
 	tail -n +3 $2 > "$pathToDataBaseRAM"
 	#Iterate in R
 	while IFS= read -r line2; do
+		echo "DB A :"
+		cat $1
+		echo "DB B :"
+		cat $3
 		echo " "
 		echo "DB RAM : ""$line2"
 		#get line number of match btw A and R (actual from while)
-		nline1=`awk -v var="$line2" '$0 == var {print NR}' $1`
+		nline1=$(awk -v var="$line2" '$0 == var {print NR}' $1)
 		nline1=$((0 + nline1)) #add a 0 in case of no return
 
-		nline3=`awk -v var="$line2" '$0 == var {print NR}' $3`
+		nline3=$(awk -v var="$line2" '$0 == var {print NR}' $3)
 		nline3=$((0 + nline3)) #add a 0 in case of no return
 
 		echo nline1 = $nline1 nline3 = $nline3
@@ -53,11 +59,11 @@ compare()
 			#search if the file name + path is in B
 			nline3=`awk -v var="$fileline2" '$1 == var{print NR}' $3`
 			nline3=$((0 + nline3)) #add a 0 in case of no return
-
 			#searching if the file has been modified or deleted :
 			#search if the file name + path is in A
 			nline1=`awk -v var="$fileline2" '$1 == var{print NR}' $1`
 			nline1=$((0 + nline3)) #add a 0 in case of no return
+			echo nline1 $nline1 nline3 $nline3
 
 			if [[ $nline1 -eq 0 ]] && [[ $nline3 -eq 0 ]]; then #both deleted
 				#Remove file in #!/bin/sh
@@ -80,8 +86,51 @@ compare()
 				sed "${nline1}q;d" $1 >> "$2" #save in S the new file with new metadata
 			else
 				echo "Conflict"
-				 conflict $fileline2 $line2 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
-			fi
+			  #name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
+			  modDateA=$(cat $1 | awk -v var=$nline1 '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+			  modDateB=$(cat $3 | awk -v var=$nline3 '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+			  echo modDateA: $modDateA
+			  echo modDateB: $modDateB
+
+			  if (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+			    mv "$pathToA""$fileline2" "$pathToA""$fileline2""_conflict"
+			    #Rename the file with the most recent mod date to file_conflict in the metadata
+			    conflictLine="${1/"$fileline2"/"$fileline2"_conflict}"
+			    #Update the DB with both metadata, the file_conflict and the file.
+			    echo "$conflictLine" >> $pathToDataBaseRAM
+			    awk '{if (NR=='$nline3') print $0}' $3 >> $pathToDataBaseRAM
+			  elif (( $(echo "$modDateA < $modDateB" | bc -l) )); then
+			    #Rename the file with the most recent mod date in its arb
+			    mv "$pathToB""$fileline2" "$pathToB""$fileline2"_conflict
+			    #Rename the file with the most recent mod date to file_conflict in the metadata
+			    conflictLine="${3/"$fileline2"/"$fileline2"_conflict}"
+			    #Update the DB with both metadata, the file_conflict and the file.
+			    echo "$conflictLine" >> $pathToDataBaseRAM
+			    awk '{if (NR=='$nline1') print $0}' $1 >> $pathToDataBaseRAM
+			  else
+			    modTimeA=$(cat $1 | awk -v var=$nline1 '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+			    echo modTimeA: $modTimeA
+			    #Find the string at the line $nameline inside B
+			    modTimeB=$(cat $3 | awk -v var=$nline3 '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+			    echo modTimeB: $modTimeB
+			    if (( $(echo "$modTimeA > $modTimeB" | bc -l) )); then
+			      #Rename the file with the most recent mod date in its arb
+			      mv "$pathToA""$fileline2" "$pathToA""$fileline2""_conflict"
+			      #Rename the file with the most recent mod date to file_conflict in the metadata
+						#Change the filename in metadata
+						sed -i "s/"$fileline2"/"$fileline2"_conflict/g" $1
+						sed "${nline1}q;d" $1 >> "$2"
+			      awk '{if (NR=='$nline3') print $0}' $3 >> $pathToDataBaseRAM
+			    else
+			      #Rename the file with the most recent mod date in its arb
+			      mv "$pathToB""$fileline2" "$pathToB""$fileline2""_conflict"
+			      #Rename the file with the most recent mod date to file_conflict in the metadata
+						sed -i "s/"$fileline2"/"$fileline2"_conflict/g" $3
+						sed "${nline1}q;d" $3 >> "$2"
+			      awk '{if (NR=='$nline1') print $0}' $1 >> $pathToDataBaseRAM
+			    fi
+			  fi
+		  fi
 		elif [[ $nline3 -eq 0 ]]; then #file has changed in B (A == R)
 			echo "File has changed in B"
 			#searching if the file has been modified or deleted :
@@ -104,6 +153,9 @@ compare()
 				#(usualy file not found)
 				sed -i "/$line2/d" $2 #delete the line in S
 			fi
+			fileline2="$fileline2"" "
+			sed -i "/"$fileline2"" "/d" $1 #delete the line in DB A
+			sed -i "/"$fileline2"" "/d" $3 #delete the line in DB B
 		elif [[ $nline1 -eq 0 ]]; then #file has changed in A (B == R)
 			echo "File has changed in A"
 			#searching if the file has been modified or deleted :
@@ -126,12 +178,16 @@ compare()
 				#(usualy file not found)
 				sed -i "/$line2/d" $2 #delete the line in S
 			fi
+			fileline2="$fileline2"" "
+			sed -i "/$fileline2/d" $1 #delete the line in DB A
+			sed -i "/$fileline2/d" $3 #delete the line in DB B
 		fi
 
 		#cat $2
 
 	done < "$pathToDataBaseRAM"
-	#rm "$pathToDataBaseRAM"
+	echo ""
+		#rm "$pathToDataBaseRAM"
 
 	#read each line of A, get the filename, check if it exists in B.
 	#If the file isn't in B, copy it to the DB and to B
@@ -139,57 +195,137 @@ compare()
 
 	while IFS= read -r line1; do #Read A
 	  echo "databaseA" : "$line1"
-	  name1=$(echo "$line1" | head -n1 | awk '{print $1}')
+	  name=$(echo "$line1" | head -n1 | awk '{print $1}')
 
 	  nameline=$(awk -v var="$name1" '$1 == var{print NR}' $3)
 
 	  nameline=$((0+ nameline))
 		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
-			echo New file "$name1" detected
-			cp -rp "$pathToA""$name1" "$pathToB""$name1"
-
+			echo New file "$name" detected
+			echo "copying from A to B"
+			cp -rp "$pathToA""$name" "$pathToB""$name"
 			echo "$line1" >> "$2" #Save the line from A into S
-
-			sed -i "/$line1/d" "$1" #delete the line in A
+			#sed -i "/$line1/d" "$1" #delete the line in A (OPTIONAL)
 		else #New file is present in abr2
+			echo "File also in B"
 				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
 				nlineS=$((0 + nlineS))
 				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
-					cp -rp "$pathToA""$name1" "$pathToDataBaseRAM"
+					cp -rp "$pathToA""$name" "$pathToDataBaseRAM"
 					sed -i "/$nlineS/d" $1
 					sed -i "/$line1/d" $3
 				else
-					echo Conflict
+					echo "Conflict"
 					#name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
-					conflict $name1 $nameline $line1 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
+					modDateA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+					modDateB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+					echo modDateA: $modDateA
+					echo modDateB: $modDateB
+
+					if (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+						mv "$pathToA""$name" "$pathToA""$name""_conflict"
+						#Rename the file with the most recent mod date to file_conflict in the metadata
+						sed -i "s/"$name"/"$name"_conflict/g" $1
+						sed "${nameline}q;d" $1 >> "$2"
+						awk '{if (NR=='$nameline') print $0}' $3 >> $pathToDataBaseRAM
+					elif (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+						#Rename the file with the most recent mod date in its arb
+						mv "$pathToB""$name" "$pathToB""$name""_conflict"
+						sed -i "s/"$name"/"$name"_conflict/g" $3
+						sed "${nameline}q;d" $3 >> "$2"
+						awk '{if (NR=='$nameline') print $0}' $1 >> $pathToDataBaseRAM
+					else
+						modTimeA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+						echo modTimeA: $modTimeA
+						#Find the string at the line $nameline inside B
+						modTimeB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+						echo modTimeB: $modTimeB
+						if (( $(echo "$modTimeA > $modTimeB" | bc -l) )); then
+							#Rename the file with the most recent mod date in its arb
+							mv "$pathToA""$name" "$pathToA""$name""_conflict"
+							#Rename the file with the most recent mod date to file_conflict in the metadata
+							sed -i "s/"$name"/"$name"_conflict/g" $1
+							sed "${nameline}q;d" $1 >> "$2"
+							awk '{if (NR=='$nameline') print $0}' $3 >> $pathToDataBaseRAM
+						else
+							#Rename the file with the most recent mod date in its arb
+							mv "$pathToB""$name" "$pathToB""$name"_conflict
+							#Rename the file with the most recent mod date to file_conflict in the metadata
+							conflictLine="${3/"$name"/"$name"_conflict}"
+							sed -i "s/"$name"/"$name"_conflict/g" $3
+							sed "${nameline}q;d" $3 >> "$2"
+							awk '{if (NR=='$nameline') print $0}' $1 >> $pathToDataBaseRAM
+						fi
+					fi
 				fi
 		fi
+		echo ""
 	done < "$1"
 
 	while IFS= read -r line3; do	#Read B
 		echo "databaseB" : "$line3"
-		name3=$(echo "$line3" | head -n1 | awk '{print $1}')
+		name=$(echo "$line3" | head -n1 | awk '{print $1}')
 		nameline=$(awk -v var="$name3" '$1 == var{print NR}' $1)
 		nameline=$((0+ nameline))
 		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
-			echo New file "$name3" detected
-			cp -rp "$pathToB""$name3" "$pathToA""$name3"
+			echo New file "$name" detected
+			echo "copying from B to A"
+			cp -rp "$pathToB""$name" "$pathToA""$name"
 
 			echo $line3 >> "$2"#Save the line from B into S
-			
-			sed -i "/$line3/d" "$3" #delete the line in B
+
+			#sed -i "/{$line3}/d" "$3" #delete the line in B (OPTIONAL)
 
 		else #New file is present in abr2
+				echo "File also in A"
 				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
 				nlineS=$((0 + nlineS))
 				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
-					cp -rp "$pathToB""$name3" "$pathToDataBaseRAM"
+					cp -rp "$pathToB""$name" "$pathToDataBaseRAM"
 					sed -i "/$lineS/d" "$1"
 					sed -i "/$line/d" "$3"
 				else
-				conflict $name3 $nameline $line3 $1 $pathToDataBaseRAM $3 $pathToA $pathToB
+					echo "Conflict"
+					#name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
+					modDateA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+					modDateB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+					echo modDateA: $modDateA
+					echo modDateB: $modDateB
+					if (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+						mv "$pathToA""$name" "$pathToA""$name""_conflict"
+						sed -i "s/"$name"/"$name"_conflict/g" $1
+						sed "${nameline}q;d" $1 >> "$2"
+						awk '{if (NR=='$nameline') print $0}' $3 >> $pathToDataBaseRAM
+					elif (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+						#Rename the file with the most recent mod date in its arb
+						mv "$pathToB""$name" "$pathToB""$name"_conflict
+						sed -i "s/"$name"/"$name"_conflict/g" $3
+						sed "${nameline}q;d" $3 >> "$2"
+						awk '{if (NR=='$nameline') print $0}' $1 >> $pathToDataBaseRAM
+					else
+						modTimeA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+						echo modTimeA: $modTimeA
+						#Find the string at the line $nameline inside B
+						modTimeB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+						echo modTimeB: $modTimeB
+						if (( $(echo "$modTimeA > $modTimeB" | bc -l) )); then
+							#Rename the file with the most recent mod date in its arb
+							mv "$pathToA""$name" "$pathToA""$name""_conflict"
+							#Rename the file with the most recent mod date to file_conflict in the metadata
+							sed -i "s/"$name"/"$name"_conflict/g" $1
+							sed "${nameline}q;d" $1 >> "$2"
+							awk -v var="$nameline" '{if (NR==var) print $0}' $3 >> $pathToDataBaseRAM
+						else
+							#Rename the file with the most recent mod date in its arb
+							mv "$pathToB""$name" "$pathToB""$name""_conflict"
+							#Rename the file with the most recent mod date to file_conflict in the metadata
+							sed -i "s/"$name"/"$name"_conflict/g" $3
+							sed "${nameline}q;d" $3 >> "$2"
+							awk -v var="$nameline" '{if (NR==var) print $0}' $1 >> $pathToDataBaseRAM
+						fi
+					fi
 				fi
 		fi
-
+		echo ""
 done < "$3"
 }

@@ -7,29 +7,51 @@
 
 conflict #name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
 {
-  nlineA=$(awk -v var="$1" 'var == $1{print NR}' $4)
-  nlineB=$nameline
+  echo "Conflict"
+  #name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
+  modDateA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+  modDateB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $7}' | sed "s/-//g")
+  echo modDateA: $modDateA
+  echo modDateB: $modDateB
 
-  modA=$(awk '{print $8}' $nlineA)
-  echo modA: $modA
-  modB=$(awk '{print $8}' $nlineB)
-  echo modB: $modB
-
-  if [ "$modA" -gt "$modB"]; then
-    #Rename the file with the most recent mod date in its arb
-    mv "$7""$name" "$8""$name"_conflict
+  if (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+    mv "$pathToA""$name" "$pathToA""$name""_conflict"
     #Rename the file with the most recent mod date to file_conflict in the metadata
-    conflictLine1="${4/"$name"/"$name"_conflict}"
+    conflictLine="${1/"$name"/"$name"_conflict}"
     #Update the DB with both metadata, the file_conflict and the file.
-    echo "$conflictLine1" >> $pathToDataBaseS
-    awk '{if (NR=='$nameline') print $0}' $6 >> $5
+    echo "$conflictLine" >> $pathToDataBaseRAM
+    awk '{if (NR=='$nameline') print $0}' $3 >> $pathToDataBaseRAM
+  elif (( $(echo "$modDateA > $modDateB" | bc -l) )); then
+    #Rename the file with the most recent mod date in its arb
+    mv "$pathToB""$name" "$pathToB""$name"_conflict
+    #Rename the file with the most recent mod date to file_conflict in the metadata
+    conflictLine="${3/"$name"/"$name"_conflict}"
+    #Update the DB with both metadata, the file_conflict and the file.
+    echo "$conflictLine" >> $pathToDataBaseS
+    awk '{if (NR=='$nameline') print $0}' $1 >> $pathToDataBaseRAM
   else
-    #Rename the file with the most recent mod date in its arb
-    mv "$8""$name" "$8""$name"_conflict
-    #Rename the file with the most recent mod date to file_conflict in the metadata
-    conflictLine1="${4/"$name"/"$name"_conflict}"
-    #Update the DB with both metadata, the file_conflict and the file.
-    echo "$conflictLine1" >> $pathToDataBaseS
-    awk '{if (NR=='$nameline') print $0}' $4 >> $5
+    modTimeA=$(cat $1 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+    echo modA: $modTimeA
+    #Find the string at the line $nameline inside B
+    modTimeB=$(cat $3 | awk -v var=$nameline '{if (NR==var) print}' | awk '{print $8}' | sed "s/://g")
+    echo modB: $modTimeB
+    if (( $(echo "$modA > $modB" | bc -l) )); then
+      #Rename the file with the most recent mod date in its arb
+      mv "$pathToA""$name" "$pathToA""$name""_conflict"
+      #Rename the file with the most recent mod date to file_conflict in the metadata
+      conflictLine="${1/"$name"/"$name"_conflict}"
+      #Update the DB with both metadata, the file_conflict and the file.
+      echo "$conflictLine" >> $pathToDataBaseRAM
+      awk '{if (NR=='$nameline') print $0}' $3 >> $pathToDataBaseRAM
+    else
+      #Rename the file with the most recent mod date in its arb
+      mv "$pathToB""$name" "$pathToB""$name"_conflict
+      #Rename the file with the most recent mod date to file_conflict in the metadata
+      conflictLine="${3/"$name"/"$name"_conflict}"
+      #Update the DB with both metadata, the file_conflict and the file.
+      echo "$conflictLine" >> $pathToDataBaseS
+      awk '{if (NR=='$nameline') print $0}' $1 >> $pathToDataBaseRAM
+    fi
   fi
+
 }
