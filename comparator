@@ -25,18 +25,20 @@ compare()
 	pathToA=`sed '1q;d' $2`
 	pathToB=`sed '2q;d' $2`
 
-
+	echo "DB A :"
+	cat $1
+	echo "DB B :"
+	cat $3
 
 	#Remove the 2 first lines (which contains the path to the files in A and B)
 	tail -n +3 $2 > "$pathToDataBaseRAM"
 	#Iterate in R
 	while IFS= read -r line2; do
-		echo "DB A :"
-		cat $1
-		echo "DB B :"
-		cat $3
 		echo " "
 		echo "DB RAM : ""$line2"
+		#if [[ "$(echo "$line2" | awk '{print $2}')" -eq "directory" ]]; then
+		#	line2=$(echo "$line2" | awk '{print $2}')
+		#fi
 		#get line number of match btw A and R (actual from while)
 		nline1=$(awk -v var="$line2" '$0 == var {print NR}' $1)
 		nline1=$((0 + nline1)) #add a 0 in case of no return
@@ -154,8 +156,8 @@ compare()
 				sed -i "/$line2/d" $2 #delete the line in S
 			fi
 			fileline2="$fileline2"" "
-			sed -i "/"$fileline2"" "/d" $1 #delete the line in DB A
-			sed -i "/"$fileline2"" "/d" $3 #delete the line in DB B
+			sed -i "/$fileline2/d" $1 #delete the line in DB A
+			sed -i "/$fileline2/d" $3 #delete the line in DB B
 		elif [[ $nline1 -eq 0 ]]; then #file has changed in A (B == R)
 			echo "File has changed in A"
 			#searching if the file has been modified or deleted :
@@ -197,7 +199,7 @@ compare()
 	  echo "databaseA" : "$line1"
 	  name=$(echo "$line1" | head -n1 | awk '{print $1}')
 
-	  nameline=$(awk -v var="$name1" '$1 == var{print NR}' $3)
+	  nameline=$(awk -v var="$name" '$1 == var{print NR}' $3)
 
 	  nameline=$((0+ nameline))
 		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
@@ -211,9 +213,9 @@ compare()
 				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
 				nlineS=$((0 + nlineS))
 				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
-					cp -rp "$pathToA""$name" "$pathToDataBaseRAM"
-					sed -i "/$nlineS/d" $1
-					sed -i "/$line1/d" $3
+					echo "$line1" >> $2
+					#sed -i "/$line1/d" $1
+					sed -i "/$nameline/d" $3
 				else
 					echo "Conflict"
 					#name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB
@@ -265,7 +267,7 @@ compare()
 	while IFS= read -r line3; do	#Read B
 		echo "databaseB" : "$line3"
 		name=$(echo "$line3" | head -n1 | awk '{print $1}')
-		nameline=$(awk -v var="$name3" '$1 == var{print NR}' $1)
+		nameline=$(awk -v var="$name" '$1 == var{print NR}' $1)
 		nameline=$((0+ nameline))
 		if [ $nameline -eq 0 ]; then	#New file in abr1 not present in abr2
 			echo New file "$name" detected
@@ -281,9 +283,9 @@ compare()
 				nlineS=$(awk -v var="$line1" 'var == $1{print NR}' $3)
 				nlineS=$((0 + nlineS))
 				if [ $nlineS -ne 0 ]; then #new file exists in both abr1 and 2, same metadata.
-					cp -rp "$pathToB""$name" "$pathToDataBaseRAM"
-					sed -i "/$lineS/d" "$1"
-					sed -i "/$line/d" "$3"
+					echo "$line3" >> $2
+					sed -i "/$line3/d" "$1"
+					#sed -i "/$line/d" "$3"
 				else
 					echo "Conflict"
 					#name, nameline, line, databaseA, databaseS, databaseB, pathToA, pathToB

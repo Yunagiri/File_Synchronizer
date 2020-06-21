@@ -21,7 +21,7 @@ iterate()
 		if [ -d "$file" ] ; then
 			#echo "subdirectory '${file##*/}' found"
 			tmp=$(stat -c '%n %F %A %s bytes %y' "$file")
-			echo ${tmp#$3} >> "$2"
+			echo ${tmp#$3} | awk '{print $1}' >> "$2"
 			#recursively call the function for subdir
 			iterate "$file" "$2" "$3"
 		else
